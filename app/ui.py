@@ -332,6 +332,7 @@ def flet_main(page: ft.Page):
     page.window.width = 600
     page.window.height = 800
     page.window.resizable = False
+    page.window.icon = "icon.ico"
     page.scroll = ft.ScrollMode.AUTO
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
