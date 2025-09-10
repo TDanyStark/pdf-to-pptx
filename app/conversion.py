@@ -174,4 +174,12 @@ def convert_pdf_to_pptx(
     dt = time.time() - t0
     _log(f"Terminado en {dt:.1f}s. Archivo: {pptx_path}")
     _progress(1.0)
+    
+    # Abrir la carpeta donde se guardó el resultado
+    try:
+        os.startfile(pdf_out_dir)
+        _log(f"Carpeta abierta: {pdf_out_dir}")
+    except Exception as e:
+        _log(f"No se pudo abrir la carpeta: {e}")
+    
     return PdfConversionResult(pdf_path, images, pptx_path, (first_w, first_h), dpi)
