@@ -46,7 +46,7 @@ def export_pdf_to_images(
     progress_start: float = 0.02,
     progress_end: float = 0.50,
 ) -> List[str]:
-    """Exporta cada página del PDF a JPG.
+    """Exporta cada página del PDF a PNG.
 
     Args:
         pdf_path: Ruta al PDF.
@@ -67,9 +67,9 @@ def export_pdf_to_images(
         for page_index in range(total_pages):
             page = doc[page_index]
             pix = page.get_pixmap(matrix=matrix, alpha=False)
-            img_name = f"page_{page_index + 1:03d}.jpg"
+            img_name = f"page_{page_index + 1:03d}.png"
             img_path = os.path.join(out_dir, img_name)
-            pix.save(img_path, jpg_quality=95)
+            pix.save(img_path)
             images.append(img_path)
             # Logging y progreso fino
             if log:
