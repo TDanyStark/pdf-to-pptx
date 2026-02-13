@@ -163,7 +163,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "flet", extras = ["all"], specifier = ">=0.22.0" },
+    { name = "flet", extras = ["all"], specifier = ">=0.80.5" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pyinstaller", specifier = ">=6.15.0" },
     { name = "pymupdf", specifier = ">=1.24.0" },

@@ -38,42 +38,44 @@ class PDFToPPTApp(ft.Container):
         self.log_view = ft.ListView(expand=True, spacing=4, auto_scroll=True)
         self.progress_bar = ft.ProgressBar(value=0)
         self.progress_text = ft.Text("Progreso: 0%", size=12)
-        self.pdf_label = ft.Text("Ningun PDF seleccionado", italic=True)
-        self.output_label = ft.Text(self.output_dir, size=12)
-
-        self.pdf_path_input = ft.TextField()
-        self.pdf_path_input.label = "Ruta del PDF"
-        self.pdf_path_input.on_change = self._on_pdf_path_changed
-
-        self.output_dir_input = ft.TextField()
-        self.output_dir_input.label = "Carpeta destino"
-        self.output_dir_input.value = self.output_dir
-        self.output_dir_input.on_change = self._on_output_dir_changed
+        self.pdf_label = ft.Text(
+            "Ningun PDF seleccionado",
+            italic=True,
+            size=12,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
+        self.output_label = ft.Text(
+            self.output_dir,
+            size=12,
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+        )
 
         header = ft.Row(
             controls=[ft.Text("PDF a PPTX", size=26, weight=ft.FontWeight.BOLD)],
             alignment=ft.MainAxisAlignment.CENTER,
         )
 
-        pick_pdf = ft.ElevatedButton()
-        pick_pdf.text = "Usar ruta"
-        pick_pdf.icon = "upload_file"
-        pick_pdf.on_click = self._apply_pdf_path
+        pick_pdf = ft.Button()
+        pick_pdf.content = "Buscar PDF"
+        pick_pdf.icon = ft.Icons.UPLOAD_FILE
+        pick_pdf.on_click = self._browse_pdf
 
-        pick_dir = ft.TextButton()
-        pick_dir.text = "Usar carpeta"
-        pick_dir.icon = "folder_open"
-        pick_dir.on_click = self._apply_output_dir
+        pick_dir = ft.Button()
+        pick_dir.content = "Buscar carpeta"
+        pick_dir.icon = ft.Icons.FOLDER_OPEN
+        pick_dir.on_click = self._browse_output_dir
 
-        self.process_btn = ft.ElevatedButton()
-        self.process_btn.text = "Procesar PDF"
-        self.process_btn.icon = "play_arrow"
+        self.process_btn = ft.Button()
+        self.process_btn.content = "Procesar PDF"
+        self.process_btn.icon = ft.Icons.PLAY_ARROW
         self.process_btn.on_click = self._on_process
         self.process_btn.disabled = True
 
         self.reset_btn = ft.OutlinedButton()
         self.reset_btn.text = "Limpiar"
-        self.reset_btn.icon = "clear"
+        self.reset_btn.icon = ft.Icons.CLEAR
         self.reset_btn.on_click = self._clear_state
         self.reset_btn.disabled = True
 
@@ -81,9 +83,13 @@ class PDFToPPTApp(ft.Container):
             content=ft.Column(
                 controls=[
                     ft.Icon("picture_as_pdf", size=64),
-                    self.pdf_path_input,
                     pick_pdf,
-                    self.pdf_label,
+                    ft.Container(
+                        content=self.pdf_label,
+                        padding=8,
+                        border=ft.border.all(1, ft.Colors.BLUE_GREY_200),
+                        border_radius=8,
+                    ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=8,
@@ -97,7 +103,13 @@ class PDFToPPTApp(ft.Container):
             content=ft.Row(
                 controls=[
                     ft.Text("Carpeta destino:", weight=ft.FontWeight.BOLD),
-                    self.output_dir_input,
+                    ft.Container(
+                        content=self.output_label,
+                        padding=8,
+                        border=ft.border.all(1, ft.Colors.BLUE_GREY_200),
+                        border_radius=8,
+                        expand=True,
+                    ),
                     pick_dir,
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -148,17 +160,9 @@ class PDFToPPTApp(ft.Container):
         self.progress_text.value = f"Progreso: {int(val * 100)}%"
         self._page.update()
 
-    def _on_pdf_path_changed(self, _):
-        self.pdf_path = self.pdf_path_input.value.strip() if self.pdf_path_input.value else None
-
-    def _on_output_dir_changed(self, _):
-        value = self.output_dir_input.value.strip() if self.output_dir_input.value else ""
-        if value:
-            self.output_dir = value
-
-    def _apply_pdf_path(self, _):
+    def _apply_pdf_path(self):
         if not self.pdf_path:
-            self._append_log("Ingrese la ruta del PDF.")
+            self._append_log("Seleccione un PDF.")
             return
         if not os.path.isfile(self.pdf_path):
             self._append_log("La ruta del PDF no es valida.")
@@ -169,9 +173,9 @@ class PDFToPPTApp(ft.Container):
         self._append_log(f"PDF seleccionado: {self.pdf_path}")
         self._page.update()
 
-    def _apply_output_dir(self, _):
+    def _apply_output_dir(self):
         if not self.output_dir:
-            self._append_log("Ingrese la carpeta destino.")
+            self._append_log("Seleccione la carpeta destino.")
             return
         if not os.path.isdir(self.output_dir):
             self._append_log("La carpeta destino no es valida.")
@@ -180,11 +184,26 @@ class PDFToPPTApp(ft.Container):
         self._append_log(f"Directorio destino: {self.output_dir}")
         self._page.update()
 
+    async def _browse_pdf(self, _):
+        files = await ft.FilePicker().pick_files(
+            allow_multiple=False,
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["pdf"],
+        )
+        if files:
+            self.pdf_path = files[0].path
+            self._apply_pdf_path()
+
+    async def _browse_output_dir(self, _):
+        path = await ft.FilePicker().get_directory_path()
+        if path:
+            self.output_dir = path
+            self._apply_output_dir()
+
     def _clear_state(self, _):
         if self.processing:
             return
         self.pdf_path = None
-        self.pdf_path_input.value = ""
         self.pdf_label.value = "Ningun PDF seleccionado"
         self.process_btn.disabled = True
         self.reset_btn.disabled = True
