@@ -76,10 +76,11 @@ class PDFToPPTApp(ft.Container):
         )
         self.process_btn.disabled = True
 
-        self.reset_btn = ft.OutlinedButton()
-        self.reset_btn.text = "Limpiar"
-        self.reset_btn.icon = ft.Icons.CLEAR
-        self.reset_btn.on_click = self._clear_state
+        self.reset_btn = ft.OutlinedButton(
+            content="Limpiar",
+            icon=ft.Icons.CLEAR,
+            on_click=self._clear_state,
+        )
         self.reset_btn.disabled = True
 
         pdf_card = ft.Container(
