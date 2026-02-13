@@ -57,20 +57,23 @@ class PDFToPPTApp(ft.Container):
             alignment=ft.MainAxisAlignment.CENTER,
         )
 
-        pick_pdf = ft.Button()
-        pick_pdf.content = "Buscar PDF"
-        pick_pdf.icon = ft.Icons.UPLOAD_FILE
-        pick_pdf.on_click = self._browse_pdf
+        pick_pdf = ft.Button(
+            content="Buscar PDF",
+            icon=ft.Icons.UPLOAD_FILE,
+            on_click=self._browse_pdf,
+        )
 
-        pick_dir = ft.Button()
-        pick_dir.content = "Buscar carpeta"
-        pick_dir.icon = ft.Icons.FOLDER_OPEN
-        pick_dir.on_click = self._browse_output_dir
+        pick_dir = ft.Button(
+            content="Buscar carpeta",
+            icon=ft.Icons.FOLDER_OPEN,
+            on_click=self._browse_output_dir,
+        )
 
-        self.process_btn = ft.Button()
-        self.process_btn.content = "Procesar PDF"
-        self.process_btn.icon = ft.Icons.PLAY_ARROW
-        self.process_btn.on_click = self._on_process
+        self.process_btn = ft.Button(
+            content="Procesar PDF",
+            icon=ft.Icons.PLAY_ARROW,
+            on_click=self._on_process,
+        )
         self.process_btn.disabled = True
 
         self.reset_btn = ft.OutlinedButton()
