@@ -86,7 +86,7 @@ class PDFToPPTApp(ft.Container):
         pdf_card = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Icon("picture_as_pdf", size=64),
+                    ft.Icon(ft.Icons.PICTURE_AS_PDF, size=64),
                     pick_pdf,
                     ft.Container(
                         content=self.pdf_label,
