@@ -22,6 +22,8 @@ from pptx.util import Inches
 
 # --------------------------- Configuración --------------------------- #
 IMG_DPI = 200
+IMG_MAX_WIDTH_PX = 1920
+JPG_QUALITY = 85
 
 # --------------------------- Data Models --------------------------- #
 @dataclass
@@ -41,12 +43,14 @@ def export_pdf_to_images(
     pdf_path: str,
     out_dir: str,
     dpi: int = IMG_DPI,
+    max_width_px: int = IMG_MAX_WIDTH_PX,
+    jpg_quality: int = JPG_QUALITY,
     log: Optional[Callable[[str], None]] = None,
     progress_hook: Optional[Callable[[float], None]] = None,
     progress_start: float = 0.02,
     progress_end: float = 0.50,
 ) -> List[str]:
-    """Exporta cada página del PDF a PNG.
+    """Exporta cada página del PDF a JPG, limitando el ancho máximo.
 
     Args:
         pdf_path: Ruta al PDF.
@@ -59,6 +63,9 @@ def export_pdf_to_images(
     """
     ensure_dir(out_dir)
     doc = fitz.open(pdf_path)
+    import io
+    import PIL.Image as PILImage
+
     images: List[str] = []
     total_pages = len(doc)
     scale = dpi / 72
@@ -67,9 +74,14 @@ def export_pdf_to_images(
         for page_index in range(total_pages):
             page = doc[page_index]
             pix = page.get_pixmap(matrix=matrix, alpha=False)
-            img_name = f"page_{page_index + 1:03d}.png"
+            img_name = f"page_{page_index + 1:03d}.jpg"
             img_path = os.path.join(out_dir, img_name)
-            pix.save(img_path)
+            with PILImage.open(io.BytesIO(pix.tobytes("png"))) as im:
+                im = im.convert("RGB")
+                if max_width_px > 0 and im.width > max_width_px:
+                    new_height = int(im.height * (max_width_px / im.width))
+                    im = im.resize((max_width_px, new_height), PILImage.LANCZOS)
+                im.save(img_path, format="JPEG", quality=jpg_quality, optimize=True)
             images.append(img_path)
             # Logging y progreso fino
             if log:
