@@ -1,4 +1,4 @@
-"""Interfaz Flet de la aplicación PDF -> PPTX (estructura tipo componente)."""
+"""Interfaz Flet para convertir PDF a PPTX usando imagenes."""
 from __future__ import annotations
 
 import os
@@ -10,285 +10,192 @@ from .conversion import convert_pdf_to_pptx, IMG_DPI
 __all__ = ["flet_main", "launch_app", "PDFToPPTApp"]
 
 
-# ---------------------------------------------------------------------------
-# Utilidades
-# ---------------------------------------------------------------------------
 def get_default_downloads_dir() -> str:
-    """Intenta obtener la carpeta Descargas del usuario de forma portable."""
+    """Obtiene la carpeta Descargas del usuario de forma portable."""
     home = os.path.expanduser("~")
     candidates = [
         os.path.join(os.environ.get("USERPROFILE", home), "Downloads"),
         os.path.join(home, "Downloads"),
     ]
-    for c in candidates:
-        if os.path.isdir(c):
-            return c
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
     return home
 
 
-# ---------------------------------------------------------------------------
-# Botones personalizados (similar al ejemplo de CalculatorApp)
-# ---------------------------------------------------------------------------
-class BaseActionButton(ft.ElevatedButton):
-    def __init__(self, text: str, on_click, icon: str | None = None, disabled: bool = False):
-        super().__init__()
-        self.text = text
-        self.icon = icon
-        self.on_click = on_click
-        self.disabled = disabled
-        self.data = text  # opcional si se quisiera distinguir
-        self.expand = 1
-
-
-class PrimaryButton(BaseActionButton):
-    def __init__(self, text: str, on_click, icon: str | None = None, disabled: bool = False):
-        super().__init__(text, on_click, icon, disabled)
-        # Estilos con estados para mostrar gris cuando está deshabilitado
-        self.style = ft.ButtonStyle(
-            bgcolor={
-                ft.ControlState.DEFAULT: ft.Colors.BLUE,
-                ft.ControlState.HOVERED: ft.Colors.BLUE_700,
-                ft.ControlState.FOCUSED: ft.Colors.BLUE_700,
-                ft.ControlState.DISABLED: ft.Colors.GREY_800,
-            },
-            color={
-                ft.ControlState.DEFAULT: ft.Colors.WHITE,
-                ft.ControlState.DISABLED: ft.Colors.WHITE24,
-            },
-        )
-
-
-class SecondaryButton(BaseActionButton):
-    def __init__(self, text: str, on_click, icon: str | None = None, disabled: bool = False):
-        super().__init__(text, on_click, icon, disabled)
-        self.style = ft.ButtonStyle(
-            bgcolor={
-                ft.ControlState.DEFAULT: ft.Colors.GREY_800,
-                ft.ControlState.HOVERED: ft.Colors.GREY_700,
-                ft.ControlState.FOCUSED: ft.Colors.GREY_700,
-                ft.ControlState.DISABLED: ft.Colors.GREY_900,
-            },
-            color={
-                ft.ControlState.DEFAULT: ft.Colors.WHITE70,
-                ft.ControlState.DISABLED: ft.Colors.WHITE24,
-            },
-        )
-
-
-# ---------------------------------------------------------------------------
-# Componente raíz de la aplicación
-# ---------------------------------------------------------------------------
 class PDFToPPTApp(ft.Container):
-    """Control raíz que encapsula todo el flujo de conversión PDF -> PPTX."""
-
-    CONTENT_MAX_WIDTH = 600
+    """UI principal que convierte PDF a PPTX como imagenes."""
 
     def __init__(self, page: ft.Page):
         super().__init__()
-        self.page = page
+        self._page = page
 
-        # Estado
         self.pdf_path: str | None = None
         self.output_dir: str = get_default_downloads_dir()
         self.processing: bool = False
         self.thread: threading.Thread | None = None
 
-        # Controles reutilizados
-        self.log_view = ft.ListView(expand=True, auto_scroll=True, spacing=4)
-        self.progress_bar = ft.ProgressBar(value=0, expand=True)
+        self.log_view = ft.ListView(expand=True, spacing=4, auto_scroll=True)
+        self.progress_bar = ft.ProgressBar(value=0)
         self.progress_text = ft.Text("Progreso: 0%", size=12)
-        self.pdf_label = ft.Text("Ningún PDF seleccionado", italic=True)
-        self.output_label = ft.Text(
-            self.output_dir,
-            selectable=True,
-            size=13,
-            max_lines=1,  # fuerza una sola línea
-            overflow=ft.TextOverflow.ELLIPSIS,
-            tooltip=self.output_dir,
-            expand=True,
+        self.pdf_label = ft.Text("Ningun PDF seleccionado", italic=True)
+        self.output_label = ft.Text(self.output_dir, size=12)
+
+        self.pdf_path_input = ft.TextField()
+        self.pdf_path_input.label = "Ruta del PDF"
+        self.pdf_path_input.on_change = self._on_pdf_path_changed
+
+        self.output_dir_input = ft.TextField()
+        self.output_dir_input.label = "Carpeta destino"
+        self.output_dir_input.value = self.output_dir
+        self.output_dir_input.on_change = self._on_output_dir_changed
+
+        header = ft.Row(
+            controls=[ft.Text("PDF a PPTX", size=26, weight=ft.FontWeight.BOLD)],
+            alignment=ft.MainAxisAlignment.CENTER,
         )
 
-        self.process_btn = PrimaryButton(
-            "Procesar PDF", icon="play_arrow", on_click=self._on_process, disabled=True
-        )
-        self.reset_btn = SecondaryButton(
-            "Limpiar", icon="clear", on_click=self._clear_state, disabled=True
-        )
+        pick_pdf = ft.ElevatedButton()
+        pick_pdf.text = "Usar ruta"
+        pick_pdf.icon = "upload_file"
+        pick_pdf.on_click = self._apply_pdf_path
 
-        # FilePickers (se añaden a overlay del page)
-        self.pdf_picker = ft.FilePicker(on_result=self._on_pdf_picked)
-        self.dir_picker = ft.FilePicker(on_result=self._on_dir_picked)
-        self.page.overlay.extend([self.pdf_picker, self.dir_picker])
+        pick_dir = ft.TextButton()
+        pick_dir.text = "Usar carpeta"
+        pick_dir.icon = "folder_open"
+        pick_dir.on_click = self._apply_output_dir
 
-        # Construcción de layout
-        self.content = self._build_layout()
-        self.width = self.CONTENT_MAX_WIDTH
-        self.alignment = ft.alignment.top_center
-        self.padding = 0
+        self.process_btn = ft.ElevatedButton()
+        self.process_btn.text = "Procesar PDF"
+        self.process_btn.icon = "play_arrow"
+        self.process_btn.on_click = self._on_process
+        self.process_btn.disabled = True
 
-        # Mensaje inicial
-        self._append_log("Listo. Seleccione un PDF para comenzar.")
+        self.reset_btn = ft.OutlinedButton()
+        self.reset_btn.text = "Limpiar"
+        self.reset_btn.icon = "clear"
+        self.reset_btn.on_click = self._clear_state
+        self.reset_btn.disabled = True
 
-    # ------------------------------------------------------------------
-    # Layout
-    # ------------------------------------------------------------------
-    def _build_layout(self) -> ft.Control:
-        # Zona de selección de PDF
-        drop_zone = ft.Container(
+        pdf_card = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Icon(name="picture_as_pdf", size=70, color=ft.Colors.AMBER),
-                    ft.Text(
-                        "Usa el botón para seleccionar el PDF",
-                        size=15,
-                        weight=ft.FontWeight.W_500,
-                    ),
-                    ft.ElevatedButton(
-                        "Seleccionar PDF", icon="upload_file", on_click=self._pick_pdf
-                    ),
+                    ft.Icon("picture_as_pdf", size=64),
+                    self.pdf_path_input,
+                    pick_pdf,
                     self.pdf_label,
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=10,
-            ),
-            height=230,
-            bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.AMBER_50),
-            border=ft.border.all(1, ft.Colors.AMBER),
-            border_radius=18,
-            padding=20,
-        )
-
-        # Selector de carpeta
-        output_selector = ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Text("Carpeta destino", weight=ft.FontWeight.BOLD),
-                    ft.Text("-", opacity=0.6),
-                    ft.Container(content=self.output_label, expand=True),
-                    ft.TextButton(
-                        "Cambiar carpeta", icon="folder_open", on_click=self._pick_folder
-                    ),
-                ],
-                spacing=12,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=8,
             ),
             padding=16,
-            border=ft.border.all(1, ft.Colors.BLUE_GREY_700),
-            border_radius=14,
+            border=ft.border.all(1, ft.Colors.AMBER),
+            border_radius=12,
         )
 
-        actions_row = ft.Row(
-            controls=[self.process_btn, self.reset_btn], spacing=16
+        output_card = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Text("Carpeta destino:", weight=ft.FontWeight.BOLD),
+                    self.output_dir_input,
+                    pick_dir,
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=8,
+            ),
+            padding=12,
+            border=ft.border.all(1, ft.Colors.BLUE_GREY_400),
+            border_radius=12,
         )
 
-        progress_section = ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        self.progress_bar,
-                        self.progress_text,
-                    ],
-                    spacing=16,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            ],
-            spacing=8,
+        progress_row = ft.Row(
+            controls=[self.progress_bar, self.progress_text],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
         log_card = ft.Container(
             content=ft.Column(
-                controls=[
-                    ft.Text("Log", weight=ft.FontWeight.BOLD),
-                    ft.Divider(height=1),
-                    ft.Container(content=self.log_view, height=120),
-                ],
+                controls=[ft.Text("Log", weight=ft.FontWeight.BOLD), self.log_view],
                 spacing=6,
             ),
-            padding=18,
-            border=ft.border.all(1, ft.Colors.BLUE_GREY_700),
-            border_radius=14,
+            height=160,
+            padding=12,
+            border=ft.border.all(1, ft.Colors.BLUE_GREY_400),
+            border_radius=12,
         )
 
-        main_column = ft.Column(
+        self.content = ft.Column(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("PDF -> PPTX", size=32, weight=ft.FontWeight.BOLD),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
-                drop_zone,
-                output_selector,
-                actions_row,
-                progress_section,
+                header,
+                pdf_card,
+                output_card,
+                ft.Row(controls=[self.process_btn, self.reset_btn], spacing=8),
+                progress_row,
                 log_card,
-                ft.Text("©Daniel Amado 2025", size=12, opacity=0.5),
+                ft.Text("PDF convertido como imagenes (no editable)", size=11, opacity=0.6),
             ],
-            spacing=20,
-            expand=False,
+            spacing=16,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         )
-        return main_column
+        self.padding = 20
 
-    # ------------------------------------------------------------------
-    # Acciones / callbacks
-    # ------------------------------------------------------------------
     def _append_log(self, message: str):
         self.log_view.controls.append(ft.Text(message, size=12))
-        self.page.update()
+        self._page.update()
 
     def _set_progress(self, val: float):
         self.progress_bar.value = val
         self.progress_text.value = f"Progreso: {int(val * 100)}%"
-        self.page.update()
+        self._page.update()
 
-    def _on_pdf_picked(self, e: ft.FilePickerResultEvent):
-        if e.files:
-            f = e.files[0]
-            self.pdf_path = f.path
-            self.pdf_label.value = os.path.basename(f.path)
-            self._append_log(f"PDF seleccionado: {f.path}")
-            self.process_btn.disabled = False
-            self.reset_btn.disabled = False  # Activar también el botón de limpiar tras seleccionar PDF
-        else:
-            self._append_log("Selección de PDF cancelada")
-        self.page.update()
+    def _on_pdf_path_changed(self, _):
+        self.pdf_path = self.pdf_path_input.value.strip() if self.pdf_path_input.value else None
 
-    def _on_dir_picked(self, e: ft.FilePickerResultEvent):
-        if e.path:
-            self.output_dir = e.path
-            self.output_label.value = e.path
-            self.output_label.tooltip = e.path  # mantener tooltip actualizado
-            self._append_log(f"Directorio destino: {e.path}")
-            self.page.update()
+    def _on_output_dir_changed(self, _):
+        value = self.output_dir_input.value.strip() if self.output_dir_input.value else ""
+        if value:
+            self.output_dir = value
 
-    # Métodos para abrir diálogos
-    def _pick_pdf(self, _):
-        self.pdf_picker.pick_files(
-            allow_multiple=False,
-            allowed_extensions=["pdf"],
-            file_type=ft.FilePickerFileType.CUSTOM,
-        )
+    def _apply_pdf_path(self, _):
+        if not self.pdf_path:
+            self._append_log("Ingrese la ruta del PDF.")
+            return
+        if not os.path.isfile(self.pdf_path):
+            self._append_log("La ruta del PDF no es valida.")
+            return
+        self.pdf_label.value = os.path.basename(self.pdf_path)
+        self.process_btn.disabled = False
+        self.reset_btn.disabled = False
+        self._append_log(f"PDF seleccionado: {self.pdf_path}")
+        self._page.update()
 
-    def _pick_folder(self, _):
-        self.dir_picker.get_directory_path()
+    def _apply_output_dir(self, _):
+        if not self.output_dir:
+            self._append_log("Ingrese la carpeta destino.")
+            return
+        if not os.path.isdir(self.output_dir):
+            self._append_log("La carpeta destino no es valida.")
+            return
+        self.output_label.value = self.output_dir
+        self._append_log(f"Directorio destino: {self.output_dir}")
+        self._page.update()
 
     def _clear_state(self, _):
         if self.processing:
             return
         self.pdf_path = None
-        self.pdf_label.value = "Ningún PDF seleccionado"
+        self.pdf_path_input.value = ""
+        self.pdf_label.value = "Ningun PDF seleccionado"
         self.process_btn.disabled = True
         self.reset_btn.disabled = True
         self.log_view.controls.clear()
         self._set_progress(0)
         self._append_log("Estado limpiado")
-        self.page.update()
+        self._page.update()
 
-    # Hilo de conversión
     def _run_conversion_thread(self):
         try:
-            self._append_log("Iniciando conversión...")
+            self._append_log("Iniciando conversion...")
             convert_pdf_to_pptx(
                 self.pdf_path,
                 self.output_dir,
@@ -296,14 +203,14 @@ class PDFToPPTApp(ft.Container):
                 log=self._append_log,
                 progress=self._set_progress,
             )
-            self._append_log("Conversión finalizada.")
+            self._append_log("Conversion finalizada.")
         except Exception as ex:  # pragma: no cover - logging
             self._append_log(f"ERROR: {ex}")
         finally:
             self.processing = False
             self.process_btn.disabled = False
             self.reset_btn.disabled = False
-            self.page.update()
+            self._page.update()
 
     def _on_process(self, _):
         if not self.pdf_path:
@@ -318,21 +225,16 @@ class PDFToPPTApp(ft.Container):
         self._append_log("Preparando...")
         self.thread = threading.Thread(target=self._run_conversion_thread, daemon=True)
         self.thread.start()
-        self.page.update()
+        self._page.update()
 
 
-# ---------------------------------------------------------------------------
-# Punto de entrada Flet
-# ---------------------------------------------------------------------------
 def flet_main(page: ft.Page):
-    """Configura la página y añade el componente raíz."""
+    """Configura la pagina y carga el control principal."""
     page.title = "PDF a PPTX"
-    page.theme_mode = ft.ThemeMode.DARK
     page.padding = 20
-    page.window.width = 600
-    page.window.height = 800
+    page.window.width = 640
+    page.window.height = 820
     page.window.resizable = False
-    page.window.icon = "icon.ico"
     page.scroll = ft.ScrollMode.AUTO
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
@@ -340,5 +242,5 @@ def flet_main(page: ft.Page):
     page.add(app)
 
 
-def launch_app():  # API pública similar a la anterior
+def launch_app():
     ft.app(target=flet_main)
